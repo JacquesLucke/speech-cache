@@ -64,10 +64,16 @@ async fn get_speech(
         response_format: "mp3".to_string(),
     };
 
+    const CACHE_DURATION: u64 = 60 * 60 * 24 * 7;
+
     match state.shared.lock().speech_cache.get(&openai_params) {
         Some(cached) => {
             return HttpResponse::Ok()
                 .content_type("audio/mpeg")
+                .insert_header((
+                    actix_web::http::header::CACHE_CONTROL,
+                    format!("max-age={}", CACHE_DURATION),
+                ))
                 .body(Bytes::from(cached.clone()));
         }
         None => {}
@@ -94,6 +100,10 @@ async fn get_speech(
                 .insert(openai_params, result_bytes.clone().into());
             HttpResponse::Ok()
                 .content_type("audio/mpeg")
+                .insert_header((
+                    actix_web::http::header::CACHE_CONTROL,
+                    format!("max-age={}", CACHE_DURATION),
+                ))
                 .body(result_bytes)
         }
     }
