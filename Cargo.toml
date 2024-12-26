@@ -1,0 +1,18 @@
+[package]
+name = "speech-cache"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+actix-web = "4"
+actix-cors = "0.7.0"
+tokio = { version = "1.39.3", features = ["full"] }
+derive_more = { version = "1.0.0", features = ["full"] }
+serde = { version = "1.0.209", features = ["serde_derive"] }
+reqwest = { version = "0.12.7", features = ["json"] }
+serde_json = "1.0.127"
+byte-unit = "5.1.4"
+parking_lot = "0.12.3"
+config = "0.15.4"
+lru-mem = "0.3.0"
