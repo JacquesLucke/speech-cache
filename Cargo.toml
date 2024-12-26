@@ -5,14 +5,15 @@ edition = "2021"
 license = "AGPL-3.0-or-later"
 
 [dependencies]
-actix-web = "4"
 actix-cors = "0.7.0"
-tokio = { version = "1.39.3", features = ["full"] }
-derive_more = { version = "1.0.0", features = ["full"] }
-serde = { version = "1.0.209", features = ["serde_derive"] }
-reqwest = { version = "0.12.7", features = ["json"] }
-serde_json = "1.0.127"
+actix-web = "4"
 byte-unit = "5.1.4"
-parking_lot = "0.12.3"
+clap = { version = "4.5.16", features = ["derive"] }
 config = "0.15.4"
+derive_more = { version = "1.0.0", features = ["full"] }
 lru-mem = "0.3.0"
+parking_lot = "0.12.3"
+reqwest = { version = "0.12.7", features = ["json"] }
+serde = { version = "1.0.209", features = ["serde_derive"] }
+serde_json = "1.0.127"
+tokio = { version = "1.39.3", features = ["full"] }

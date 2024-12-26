@@ -1,7 +1,9 @@
 use actix_web::{web::Bytes, HttpResponse, HttpServer, Responder};
+use clap::Parser;
 use config;
 use lru_mem::{HeapSize, LruCache};
 use parking_lot::Mutex;
+use std::net::TcpListener;
 use std::{hash::Hash, sync::Arc};
 
 struct AppState {
@@ -97,12 +99,28 @@ async fn get_speech(
     }
 }
 
+#[derive(Parser, Debug)]
+#[command(version, about)]
+struct Args {
+    #[arg(long, default_value = "0.0.0.0")]
+    host: String,
+
+    #[arg(long, default_value = "9001")]
+    port: u16,
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let settings = config::Config::builder()
         .add_source(config::File::with_name("secrets.toml"))
         .build()
         .unwrap();
+
+    let args = Args::parse();
+
+    let listener = TcpListener::bind((args.host.clone(), args.port)).expect("Cannot bind to port");
+    let actual_port = listener.local_addr().unwrap().port();
+    println!("Start server on http://{}:{}", args.host, actual_port);
 
     let secrets: Secrets = settings.try_deserialize().unwrap();
     let shared = Arc::new(Mutex::new(SharedState {
@@ -120,7 +138,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(actix_cors::Cors::permissive())
     })
     .workers(1)
-    .bind("127.0.0.1:8080")?
+    .listen(listener)?
     .run()
     .await
 }
