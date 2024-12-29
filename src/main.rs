@@ -118,7 +118,8 @@ async fn get_speech(
                 return HttpResponse::InternalServerError().body(format!("Invalid: {:?}", res));
             }
             let result_bytes = res.bytes().await.unwrap();
-            let result_bytes = apply_volume_factor(result_bytes, volume_factor);
+            let result_bytes = apply_volume_factor(result_bytes.clone(), volume_factor)
+                .unwrap_or_else(|_| result_bytes.to_vec());
             let _ = state
                 .shared
                 .lock()
@@ -135,28 +136,31 @@ async fn get_speech(
     }
 }
 
-fn apply_volume_factor(audio_file: Bytes, volume_factor: ordered_float::NotNan<f32>) -> Vec<u8> {
+fn apply_volume_factor(
+    audio_file: Bytes,
+    volume_factor: ordered_float::NotNan<f32>,
+) -> anyhow::Result<Vec<u8>> {
     let mss = symphonia::core::io::MediaSourceStream::new(
         Box::new(Cursor::new(audio_file)),
         Default::default(),
     );
-    let probe = symphonia::default::get_probe()
-        .format(
-            &Default::default(),
-            mss,
-            &Default::default(),
-            &Default::default(),
-        )
-        .expect("Unsupported format");
+    let probe = symphonia::default::get_probe().format(
+        &Default::default(),
+        mss,
+        &Default::default(),
+        &Default::default(),
+    )?;
     let mut format = probe.format;
-    let track = &format.tracks()[0];
-    let sample_rate = track.codec_params.sample_rate.unwrap();
+    let track = &format.tracks().get(0).ok_or(anyhow::anyhow!("No track"))?;
+    let sample_rate = track
+        .codec_params
+        .sample_rate
+        .ok_or(anyhow::anyhow!("No sample rate"))?;
     let channels = 1;
 
     // Create a decoder for the audio track.
-    let mut decoder = symphonia::default::get_codecs()
-        .make(&track.codec_params, &DecoderOptions::default())
-        .expect("Failed to create decoder");
+    let mut decoder =
+        symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
 
     let mut all_samples: Vec<f32> = Vec::new();
 
@@ -178,17 +182,20 @@ fn apply_volume_factor(audio_file: Bytes, volume_factor: ordered_float::NotNan<f
     let mut mp3_encoder = mp3lame_encoder::Builder::new().expect("Create LAME builder");
     mp3_encoder
         .set_num_channels(channels as u8)
-        .expect("set channels");
+        .map_err(|_| anyhow::anyhow!("set channels"))?;
     mp3_encoder
         .set_sample_rate(sample_rate as u32)
-        .expect("set sample rate");
+        .map_err(|_| anyhow::anyhow!("set sample rate"))?;
     mp3_encoder
         .set_brate(mp3lame_encoder::Bitrate::Kbps192)
-        .expect("set brate");
+        .map_err(|_| anyhow::anyhow!("set brate"))?;
     mp3_encoder
         .set_quality(mp3lame_encoder::Quality::Best)
-        .expect("set quality");
-    let mut mp3_encoder = mp3_encoder.build().expect("To initialize LAME encoder");
+        .map_err(|_| anyhow::anyhow!("set quality"))?;
+
+    let mut mp3_encoder = mp3_encoder
+        .build()
+        .map_err(|_| anyhow::anyhow!("initialize LAME encoder"))?;
 
     let input = mp3lame_encoder::MonoPcm(&all_samples);
 
@@ -196,17 +203,18 @@ fn apply_volume_factor(audio_file: Bytes, volume_factor: ordered_float::NotNan<f
     mp3_out_buffer.reserve(mp3lame_encoder::max_required_buffer_size(all_samples.len()));
     let encoded_size = mp3_encoder
         .encode(input, mp3_out_buffer.spare_capacity_mut())
-        .expect("To encode");
+        .map_err(|_| anyhow::anyhow!("encode"))?;
+
     unsafe {
         mp3_out_buffer.set_len(mp3_out_buffer.len().wrapping_add(encoded_size));
     }
     let encoded_size = mp3_encoder
         .flush::<mp3lame_encoder::FlushNoGap>(mp3_out_buffer.spare_capacity_mut())
-        .expect("to flush");
+        .map_err(|_| anyhow::anyhow!("flush"))?;
     unsafe {
         mp3_out_buffer.set_len(mp3_out_buffer.len().wrapping_add(encoded_size));
     }
-    mp3_out_buffer
+    Ok(mp3_out_buffer)
 }
 
 #[derive(Parser, Debug)]
